@@ -1,0 +1,6 @@
+{
+  "name": "Player de Música",
+  "description": "Standalone music player with YouTube Music search, queue management, audio streaming, and overlay configuration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

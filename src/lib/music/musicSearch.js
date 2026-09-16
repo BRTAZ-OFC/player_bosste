@@ -5,8 +5,6 @@
 // mas NÃO são chamadas pelo frontend em modo zero-credit.
 // NUNCA converte para youtube.com — preserva music.youtube.com sempre.
 
-import { base44 } from '@/api/base44Client';
-
 const SEARCH_TIMEOUT = 12000;
 
 // Re-exporta parseMusicUrl do MusicUrlManager (substitui parseYouTubeUrl)
