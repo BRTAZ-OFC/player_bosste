@@ -332,11 +332,14 @@ async function fetchSearchJina(query, filter) {
 
 // Parser do markdown da página de search do YouTube Music (via r.jina.ai).
 // Extrai: músicas (watch), artistas (channel UC), álbuns (browse MP), playlists/mixes (playlist).
+// Line-based: o YouTube Music renderiza cards como link (às vezes vazio [](url)) + título em
+// texto separado + miniatura ![Image](url). Capturamos os três e deduplicamos por id.
 function parseSearchMarkdown(text) {
   const results = [];
   const seen = new Set();
+  const lines = text.split('\n');
 
-  // Músicas — reusa o parser de watch links (extrai videoId, title, artist, album, duration)
+  // Músicas — reusa o parser de watch links (extrai videoId, title, artist, album, duration, thumbnail)
   const songs = parseTracksFromMarkdown(text);
   for (const s of songs) {
     if (seen.has(s.videoId)) continue;
@@ -344,39 +347,109 @@ function parseSearchMarkdown(text) {
     results.push({ ...s, type: 'song' });
   }
 
-  // Artistas — links de canal (UC...)
-  const artistRe = /\[([^\]]+)\]\(https:\/\/music\.youtube\.com\/channel\/(UC[a-zA-Z0-9_-]+)/g;
-  let m;
-  while ((m = artistRe.exec(text)) !== null) {
-    const title = m[1].trim();
-    const browseId = m[2];
-    if (seen.has(browseId) || seen.has(title)) continue;
-    seen.add(browseId); seen.add(title);
-    results.push({ title, artist: title, type: 'artist', browseId, music_url: `https://music.youtube.com/channel/${browseId}`, source: 'YouTube Music' });
+  // Miniatura mais próxima de uma linha (procura ![...](url) num raio de ±4 linhas)
+  function nearbyImage(idx) {
+    for (let j = Math.max(0, idx - 4); j <= Math.min(lines.length - 1, idx + 4); j++) {
+      const im = lines[j].match(/!\[[^\]]*\]\((https?:\/\/[^\)]+)\)/);
+      if (im) return im[1];
+    }
+    return '';
   }
 
-  // Álbuns — links de browse (MPRE/MPSP)
-  const albumRe = /\[([^\]]+)\]\(https:\/\/music\.youtube\.com\/browse\/(MP[a-zA-Z0-9]+)/g;
-  while ((m = albumRe.exec(text)) !== null) {
-    const title = m[1].trim();
-    const browseId = m[2];
-    if (seen.has(browseId) || seen.has(title)) continue;
-    seen.add(browseId); seen.add(title);
-    results.push({ title, type: 'album', browseId, music_url: `https://music.youtube.com/browse/${browseId}`, source: 'YouTube Music' });
+  // Próximo texto "puro" (título) após a linha do link — pula imagens, links e metadados
+  function nextTitle(idx) {
+    for (let j = idx + 1; j < Math.min(lines.length, idx + 6); j++) {
+      const l = lines[j].trim();
+      if (!l) continue;
+      if (/^!\[/.test(l)) continue;
+      if (/^\[.*\]\(https?:\/\//.test(l)) continue;
+      if (/^(Song|Video|Playlist|Album|Artist|•)/i.test(l)) continue;
+      if (/^\d{1,2}:\d{2}/.test(l)) continue;
+      return l;
+    }
+    return '';
   }
 
-  // Playlists & Mixes — links de playlist (PL/VL/FL/LL/OL/RD...)
-  const plRe = /\[([^\]]+)\]\(https:\/\/music\.youtube\.com\/playlist\?list=([a-zA-Z0-9_-]+)/g;
-  while ((m = plRe.exec(text)) !== null) {
-    const title = m[1].trim();
-    const playlistId = m[2];
-    if (seen.has(playlistId) || seen.has(title)) continue;
-    seen.add(playlistId); seen.add(title);
-    const isMix = playlistId.startsWith('RD');
-    results.push({ title, type: isMix ? 'mix' : 'playlist', playlistId, music_url: `https://music.youtube.com/playlist?list=${playlistId}`, source: 'YouTube Music' });
+  const linkRe = /\[([^\]]*)\]\((https:\/\/music\.youtube\.com\/(?:watch\?v=|channel\/|browse\/|playlist\?list=)[^\)]*)\)/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(linkRe);
+    if (!m) continue;
+    const linkText = m[1].trim();
+    const url = m[2];
+
+    if (url.includes('/watch?v=')) continue; // músicas já capturadas acima
+
+    if (url.includes('/channel/UC')) {
+      const bid = url.match(/\/channel\/(UC[a-zA-Z0-9_-]+)/)[1];
+      if (seen.has(bid)) continue;
+      const title = linkText || nextTitle(i);
+      if (!title) continue;
+      seen.add(bid);
+      results.push({ title, artist: title, type: 'artist', browseId: bid, thumbnail: nearbyImage(i), music_url: url, source: 'YouTube Music' });
+    } else if (url.includes('/browse/MP')) {
+      const bid = url.match(/\/browse\/(MP[a-zA-Z0-9]+)/)[1];
+      if (seen.has(bid)) continue;
+      const title = linkText || nextTitle(i);
+      if (!title) continue;
+      seen.add(bid);
+      results.push({ title, type: 'album', browseId: bid, thumbnail: nearbyImage(i), music_url: url, source: 'YouTube Music' });
+    } else if (url.includes('/playlist?list=')) {
+      const pid = url.match(/list=([a-zA-Z0-9_-]+)/)[1];
+      if (seen.has(pid)) continue;
+      const title = linkText || nextTitle(i);
+      if (!title) continue;
+      seen.add(pid);
+      const isMix = pid.startsWith('RD');
+      results.push({ title, type: isMix ? 'mix' : 'playlist', playlistId: pid, thumbnail: nearbyImage(i), music_url: url, source: 'YouTube Music' });
+    }
   }
 
   return results;
+}
+
+// Busca no YouTube (youtube.com) via r.jina.ai — ZERO CREDITS, frontend.
+// Complementa a busca do YT Music com vídeos do YouTube (mesmo catálogo, fonte youtube.com).
+export async function searchYouTube(query, opts = {}) {
+  if (!query || !query.trim()) return { items: [], continuation: '' };
+  const maxResults = opts.maxResults || 20;
+  try {
+    const text = await fetchViaJina(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+    const items = parseYouTubeMarkdown(text).slice(0, maxResults);
+    return { items, continuation: '' };
+  } catch (err) {
+    console.warn('[musicSearch] searchYouTube (jina) falhou:', err?.message || err);
+    return { items: [], continuation: '' };
+  }
+}
+
+// Parser do markdown da página de resultados do YouTube (via r.jina.ai).
+// Extrai vídeos (watch links do youtube.com) — não confunde com music.youtube.com.
+function parseYouTubeMarkdown(text) {
+  const items = [];
+  const seen = new Set();
+  const re = /\[([^\]]+)\]\(https?:\/\/(?:www\.|m\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})(?:[^\)]*)?\)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const title = m[1].trim();
+    const videoId = m[2];
+    if (seen.has(videoId)) continue;
+    seen.add(videoId);
+    const { artist, song } = parseTitle(title, '');
+    items.push({
+      videoId,
+      title: song,
+      artist,
+      album: '',
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      duration: 0,
+      durationStr: '',
+      type: 'youtube',
+      source: 'YouTube',
+      channelTitle: artist,
+    });
+  }
+  return items;
 }
 
 // --- Helpers ---

@@ -15,6 +15,7 @@ import {
   stop as audioStop, setActive as audioSetActive, destroyAudioPlayer,
 } from './html5AudioPlayer';
 import { isMigrationEnabled } from './migrationFlag';
+import { getRelatedTracks } from './musicSearch';
 
 let iframe = null;
 let activeBackend = 'youtube'; // 'youtube' | 'audio' — qual backend está ativo
@@ -554,17 +555,26 @@ function handleStateChange(state) {
   broadcastState();
 }
 
-function handleTrackEnd() {
+async function handleTrackEnd() {
   const settings = loadMusicSettings();
   const next = queueManager.next(settings.repeat, settings.shuffle);
-  if (next) {
-    playTrack(next);
-  } else {
-    currentTrack = null;
-    audioStop(); // limpa o backend de áudio se ativo
-    playerEvents.emit('queue_empty');
-    broadcastState();
+  if (next) { playTrack(next); return; }
+  // Fila vazia — auto-continua com faixas parecidas (mesmo artista/ritmo) para manter a constância.
+  if (currentTrack) {
+    try {
+      const related = await getRelatedTracks(currentTrack, null, 12);
+      const list = (related || []).filter((t) => t && t.videoId && t.videoId !== currentTrack.videoId);
+      if (list.length) {
+        queueManager.setQueue(list, 0);
+        playTrack(list[0]);
+        return;
+      }
+    } catch { /* ignore — sem relacionadas, para */ }
   }
+  currentTrack = null;
+  audioStop(); // limpa o backend de áudio se ativo
+  playerEvents.emit('queue_empty');
+  broadcastState();
 }
 
 export function getCurrentTrack() {

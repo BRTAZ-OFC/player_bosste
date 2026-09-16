@@ -1,106 +1,62 @@
-# player_bosste — Player de Música Standalone
+# Base44 Project
 
-Backup standalone do player de música e pesquisa de músicas do projeto LiveNexus/StreamSpeak.
-Funciona de forma independente, sem TTS, overlays, login, autenticação ou pagamentos.
+Use this repository to run and edit the app locally, then publish changes back through Base44.
 
-## Objetivo
+Any change pushed to the repo will also be reflected in the Base44 Builder.
 
-Preservar exatamente o módulo de player de música e busca de músicas como existe hoje.
+## Prerequisites
 
-## Arquivos principais
+1. Clone the repository using the project's Git URL.
+2. Navigate to the project directory.
+3. Install dependencies: `npm install`.
+4. Install the Base44 CLI: `npm install -g base44@latest`.
+5. Install [Deno](https://docs.deno.com/runtime/getting_started/installation/) — the local Base44 backend runs on it.
 
-### Player (componentes visuais)
-- `src/components/music/MusicPlayerContainer.jsx` — container oculto do iframe
-- `src/components/music/MusicPlayerBar.jsx` — barra do player (play/pause/next/prev/volume/busca)
-- `src/components/music/MusicQueue.jsx` — fila de reprodução visual
-- `src/components/music/MusicHistory.jsx` — histórico de faixas tocadas
-- `src/components/music/MusicDirectUrl.jsx` — input de URL de áudio direto (fallback HTML5)
-- `src/components/music/MusicOverlayConfig.jsx` — configuração de overlay e ducking
+Run `base44 --help` (or see the [CLI reference](https://docs.base44.com/developers/references/cli/commands/introduction)) for the full command surface.
 
-### Busca
-- `src/components/music/MusicSearch.jsx` — UI de busca (termo + URL + tabs + histórico)
-- `src/lib/music/musicSearch.js` — serviço de busca (r.jina.ai, zero-credit)
+## Run Locally
 
-### Lógica (lib)
-- `src/lib/music/youtubePlayer.js` — player YouTube iframe + postMessage + fallback HTML5
-- `src/lib/music/useMusicPlayer.js` — hook React
-- `src/lib/music/playerEvents.js` — event emitter central
-- `src/lib/music/musicSettings.js` — configurações (localStorage)
-- `src/lib/music/queueManager.js` — fila (repeat/shuffle)
-- `src/lib/music/historyManager.js` — histórico (localStorage)
-- `src/lib/music/html5AudioPlayer.js` — backend HTML5 audio (fallback)
-- `src/lib/music/migrationFlag.js` — flag youtube-nocookie
-- `src/lib/music/musicUrlManager.js` — validação de URLs
-- `src/lib/music/searchHistoryManager.js` — histórico de buscas (localStorage)
-- `src/lib/music/ttsMusicIntegration.js` — ducking TTS (stub — sem TTS neste pacote)
-
-### UI primitives
-- `src/components/ui/input.jsx`, `button.jsx`, `label.jsx`
-
-### Stub
-- `src/api/base44Client.js` — stub (import morto em musicSearch.js)
-
-## Como iniciar
+Three commands, from the project root:
 
 ```bash
-npm install
-npm run dev
+base44 login   # one-time per machine
+base44 link    # one-time per clone
+base44 dev     # local backend + frontend together
 ```
 
-## Dependências
+Open the frontend URL that `base44 dev` prints (typically `http://localhost:5173`).
 
-- react, react-dom, lucide-react
-- @radix-ui/react-slot, @radix-ui/react-label
-- class-variance-authority, clsx, tailwind-merge
-- vite, @vitejs/plugin-react, tailwindcss, autoprefixer (dev)
+Notes:
 
-## Como funciona a busca
+- **Every fresh clone needs `base44 link`.** It writes `base44/.app.jsonc` (the app-id pointer), which is deliberately gitignored. Your app id is in the Builder URL (`app.base44.com/apps/<id>/...`); `base44 link --help` shows the non-interactive flags.
+- **`base44 dev` runs the frontend for you** (via `site.serveCommand` in this repo's `base44/config.jsonc`) — never run `npm run dev` yourself: alone it serves a UI with no backend behind it (`[base44] Proxy not enabled`, every `/api` call fails), and alongside `base44 dev` the second Vite silently takes the next port and you end up looking at the wrong one.
+- **The app must be published at least once for the UI to load under `base44 dev`.** The frontend boots by fetching app settings from the hosted app; before the first publish that fails and every page redirects to login. The local API works regardless.
+- Entities, functions, and auth run locally — entity data is **in-memory only**, wiped when `base44 dev` restarts. Everything else (Core integrations, OAuth login) is forwarded to your deployed app. Full breakdown: [Local development overview](https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview).
 
-A busca usa **r.jina.ai** (proxy de leitura gratuito) direto do frontend — zero Integration Credits.
+## Frontend Only, Hosted Backend
 
-1. Usuário digita um termo na aba ativa (Músicas, Artistas, Álbuns, Playlists, Mixes)
-2. `musicSearch.js` busca `https://music.youtube.com/search?q=TERMO` via `https://r.jina.ai/...`
-3. r.jina.ai renderiza server-side e devolve markdown
-4. `parseSearchMarkdown()` extrai músicas, artistas, álbuns, playlists e mixes
-5. Resultados filtrados client-side conforme a aba ativa
+To work on just the frontend against your app's live hosted backend:
 
-## Como funciona o player
+```bash
+base44 dev --remote
+```
 
-O player usa um **iframe do YouTube** (`youtube-nocookie.com/embed`) com controle via **postMessage**:
+⚠️ In this mode writes go to your app's **production data** — plain `base44 dev` keeps everything local.
 
-1. `MusicPlayerContainer` cria iframe oculto `id="yt-music-player"`
-2. `youtubePlayer.js` envia comandos postMessage (playVideo, pauseVideo, seekTo, setVolume)
-3. Iframe responde via infoDelivery (currentTime, duration, playerState)
-4. `useMusicPlayer` escuta eventos via `playerEvents` e atualiza a UI
-5. Fila, histórico, repeat e shuffle gerenciados por `queueManager` e `historyManager`
-6. Fallback HTML5 audio para fontes diretas (MP3/OGG/WAV) via `html5AudioPlayer.js`
+## Publish Your Changes
 
-## Variáveis de ambiente necessárias
+After pushing your changes to git, open the Base44 dashboard and publish the app:
 
-**Nenhuma.** O player e a busca funcionam sem variáveis de ambiente.
+```bash
+base44 dashboard open
+```
 
-## Limitações conhecidas
+This repo syncs to Base44 through git, so publish from the dashboard rather than `base44 deploy` — a CLI deploy ships your local tree directly, bypassing the sync, and the deployed state silently diverges from the repo.
 
-1. **Paginação não suportada** — r.jina.ai não suporta continuation tokens. `searchMore()` retorna vazio.
-2. **r.jina.ai pode ser rate-limited** — sob uso intenso, pode retornar erro 429.
-3. **Parser de markdown frágil** — se o YouTube Music mudar a estrutura HTML, o parser pode falhar.
-4. **Autoplay bloqueado** — iframe inicia mudo (mute=1), desbloqueia na primeira interação do usuário.
-5. **youtube-nocookie.com** — usado em vez de youtube.com para compatibilidade com ambientes restritos.
+## Docs & Support
 
-## Bug conhecido da pesquisa
+GitHub integration: [https://docs.base44.com/developers/app-code/local-development/github](https://docs.base44.com/developers/app-code/local-development/github)
 
-- **Paginação (continuation) não funciona** — `fetchSearch()` retorna `{ results: [], continuation: '' }`
-  quando `continuation` é fornecido. O botão "Carregar mais" não carrega novos resultados.
-- **Import morto do Base44** — `musicSearch.js` linha 8 importa `base44` mas não o utiliza.
-  Substituído por stub (`src/api/base44Client.js`) neste pacote standalone.
+Local development: [https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview](https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview)
 
-## Dependências externas
-
-- **r.jina.ai** — proxy de leitura gratuito (sem API key)
-- **YouTube Music** — catálogo de músicas
-- **youtube-nocookie.com** — iframe de reprodução
-
-## Dependências Base44 ainda existente
-
-- `src/api/base44Client.js` é um **stub** — import morto em `musicSearch.js`, não usado em runtime.
-  Nenhuma chamada a `base44.functions.invoke` ou `base44.integrations` é feita em modo zero-credit.
+Support: [https://app.base44.com/support](https://app.base44.com/support)
