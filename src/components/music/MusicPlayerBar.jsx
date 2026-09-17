@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Repeat, Repeat1, Shuffle, Music2, AlertCircle, Mic2, VolumeOff, ExternalLink, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
-import { play, pause, playNext, playPrev, seekTo, setVolume, unlockAudio, isAudioLocked, getCurrentMusicUrl } from '@/lib/music/youtubePlayer';
+import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Repeat, Repeat1, Shuffle, Music2, AlertCircle, Mic2, ExternalLink, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
+import { play, pause, playNext, playPrev, setVolume, unlockAudio, isAudioLocked } from '@/lib/music/youtubePlayer';
 import { loadMusicSettings, saveMusicSettings } from '@/lib/music/musicSettings';
 import { playerEvents } from '@/lib/music/playerEvents';
 import { useMusicPlayer } from '@/lib/music/useMusicPlayer';

@@ -53,7 +53,7 @@ function resolveBackendBase() {
 }
 
 function buildEmbedUrl(videoId) {
-  const origin = (typeof window !== 'undefined' && window.location?.origin) || 'https://streamspeak.base44.app';
+  const origin = (typeof window !== 'undefined' && window.location?.origin) || 'http://localhost:3000';
   return `${activeBackendBase}/embed/${videoId}?autoplay=1&mute=1&enablejsapi=1&playsinline=1&rel=0&modestbranding=1&origin=${encodeURIComponent(origin)}`;
 }
 
@@ -79,7 +79,7 @@ function setupAutoUnlock() {
 
 // Preview da URL baseado na flag ATUAL (sem capturar — para diagnóstico)
 export function previewEmbedUrl(videoId) {
-  const origin = (typeof window !== 'undefined' && window.location?.origin) || 'https://streamspeak.base44.app';
+  const origin = (typeof window !== 'undefined' && window.location?.origin) || 'http://localhost:3000';
   return `${resolveBackendBase()}/embed/${videoId}?autoplay=1&mute=1&enablejsapi=1&playsinline=1&rel=0&modestbranding=1&origin=${encodeURIComponent(origin)}`;
 }
 

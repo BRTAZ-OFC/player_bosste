@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, History, Trash2, Users, ArrowLeft } from 'lucide-react';
 import {
-  searchAll, searchYouTube, searchMusic, searchPlaylists } from
+  searchAll, searchMusic, searchPlaylists } from
 '@/lib/music/musicSearch';
-import { searchMusicBrainz } from '@/lib/music/musicBrainz';
 import { searchItunes } from '@/lib/music/itunes';
 import { searchDeezer } from '@/lib/music/deezer';
 import { searchBandcamp } from '@/lib/music/bandcamp';
@@ -60,7 +59,7 @@ export default function MusicGallery({ externalQuery, onSearch, filter }) {
     const t = (externalQuery || '').trim();
     if (t) {setNav([]);runSearch(t);} else
     {setSearched(false);setGroups({});setError(null);}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [externalQuery]);
 
   async function loadBrowse() {

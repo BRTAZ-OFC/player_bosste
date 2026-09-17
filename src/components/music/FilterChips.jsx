@@ -1,4 +1,3 @@
-import React from 'react';
 
 // Chips de categoria — filtram a galeria por seção (não são busca textual).
 // Ao tocar, alternam o filtro ativo; tocar novamente desliga.
